@@ -28,6 +28,7 @@ lazy val root = (project in file("."))
       "com.lihaoyi" %% "requests" % "0.7.1",
       "com.github.scopt" %% "scopt" % "4.0.1"
     ),
+    Compile / mainClass := Some("fr.inrae.msd.rdf.DirectParentsBuilder"),
     Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat,
     resolvers ++= Seq(
       "AKSW Maven Releases" at "https://maven.aksw.org/archiva/repository/internal",
@@ -42,7 +43,7 @@ lazy val root = (project in file("."))
     ),
     Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oD"),
     assembly / target := file("assembly"),
-      assembly / assemblyJarName := s"msd-metdisease-database-pmid-cid-builder.jar",
+      assembly / assemblyJarName := s"msd-metdisease-database-chemont-direct-parents.jar",
     assembly / logLevel := Level.Info,
     assembly / assemblyMergeStrategy := {
      //case PathList("META-INF", xs @ _*) => MergeStrategy.last

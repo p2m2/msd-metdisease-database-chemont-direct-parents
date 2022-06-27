@@ -1,9 +1,13 @@
 package fr.inrae.msd.rdf
 
+/* ToDS */
+import net.sansa_stack.rdf.spark.model.TripleOperations
 import org.apache.jena.graph.Triple
+import net.sansa_stack.rdf.spark.io._
+import org.apache.jena.riot.Lang
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
-
+import org.apache.spark.sql.{Dataset, Encoder, Encoders, SparkSession}
 /**
  * https://services.pfem.clermont.inrae.fr/gitlab/forum/metdiseasedatabase/-/blob/develop/app/build/import_PMID_CID.py
  * build/import_PMID_CID.py
@@ -25,7 +29,6 @@ object DirectParentsBuilder {
                      pubchemCategoryMsd : String = "pubchem", //"/rdf/pubchem/compound-general/2021-11-23",
                      pubchemDatabaseMsd : String = "reference", // "/rdf/pubchem/reference/2021-11-23",
                      pubchemVersionMsd: Option[String] = None,
-                     implGetPMID: Int = 0, /* 0 : Dataset[Triple], 1 : [RDD[Binding], 2 : Triples.getSubject */
                      referenceUriPrefix: String = "http://rdf.ncbi.nlm.nih.gov/pubchem/reference/PMID",
                      packSize : Int = 5000,
                      apiKey : Option[String] = Some("30bc501ba6ab4cba2feedffb726cbe825c0a"),
@@ -115,7 +118,6 @@ object DirectParentsBuilder {
               category=config.pubchemCategoryMsd,
               database=config.pubchemDatabaseMsd,spark=spark).getLastVersion()
           },
-          config.implGetPMID,
           config.referenceUriPrefix,
           config.packSize,
           config.apiKey match {
@@ -140,7 +142,6 @@ object DirectParentsBuilder {
    * @param categoryMsd
    * @param databaseMsd
    * @param versionMsd
-   * @param implGetPMID
    * @param referenceUriPrefix
    * @param packSize
    * @param apiKey
@@ -163,26 +164,39 @@ object DirectParentsBuilder {
              debug: Boolean) : Unit = {
     println("============== Main Build ====================")
     println(s"categoryMsd=$categoryMsd,databaseMsd=$databaseMsd,versionMsd=$versionMsd")
-    println("==============  getPMIDListFromReference ====================")
-    val listReferenceFileNames = MsdUtils(
-      rootDir=rootMsdDirectory,
-      category=categoryMsd,
-      database=databaseMsd,
-      spark=spark).getListFiles(versionMsd,".*_type.*\\.ttl")
 
-    println("================listReferenceFileNames==============")
-    println(listReferenceFileNames)
-
-    if (listReferenceFileNames.length<=0) {
-      println(s"None reference file in $rootMsdDirectory/$categoryMsd/$databaseMsd/$versionMsd")
-      spark.close()
-      System.exit(0)
-    }
-
+    val CID_Inchs : RDD[(String,String)] = extract_CID_InchiKey(rootMsdDirectory,"./rdf/forum/PMID_CID/test/pmid_cid.ttl")
+    CID_Inchs.take(5).foreach(println)
     spark.close()
   }
 
-  def extract_CID_InchiKey(): Unit = {
+  def extract_CID_InchiKey(rootMsdDirectory : String,input : String) : RDD[(String,String)] = {
+    val triples_asso_pmid_cid : RDD[Triple] = spark.rdf(Lang.TURTLE)(input)
+    println("=============  COUNT ========================")
+    println(s"COUNT:${triples_asso_pmid_cid.count()}")
 
+    val triplesDataset : Dataset[Triple] = triples_asso_pmid_cid.toDS()
+
+    implicit val enc: Encoder[String] = Encoders.STRING
+
+    val CIDs : RDD[String] = triplesDataset.map(
+      (triple  : Triple ) => {
+        triple.getObject.toString
+      }
+    ).rdd
+
+    println("2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222")
+    val pubchem = MsdPubChem(spark,rootDir=rootMsdDirectory)
+    val l = pubchem.getPathReferenceTypeFiles()
+    l.foreach(
+      u => println("******************"+u)
+    )
+
+    val l2 =pubchem.getPathInchiKey2compoundFiles()
+    l2.foreach(
+      u => println("******************"+u)
+    )
+    println("2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222")
+    CIDs.map(s => {(s->"")})
   }
 }
