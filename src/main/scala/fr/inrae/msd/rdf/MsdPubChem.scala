@@ -5,7 +5,6 @@ import net.sansa_stack.query.spark.sparqlify.QueryEngineFactorySparqlify
 import net.sansa_stack.ml.spark.featureExtraction.SparqlFrame
 import net.sansa_stack.query.spark.SPARQLEngine
 
-
 import net.sansa_stack.rdf.spark.model.TripleOperations
 import org.apache.jena.graph.{NodeFactory, Triple}
 import net.sansa_stack.rdf.spark.io._
@@ -85,7 +84,6 @@ case class MsdPubChem(
       .map(_.split("/").last.replace(".gz",""))
       .collect()
       .map( s"$rootDir/$category/inchikey/$version/"+_)
-
   }
 
 }

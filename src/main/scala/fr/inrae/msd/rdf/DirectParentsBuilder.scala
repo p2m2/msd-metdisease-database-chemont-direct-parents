@@ -1,6 +1,8 @@
 package fr.inrae.msd.rdf
 
 /* ToDS */
+import net.sansa_stack.ml.spark.featureExtraction.SparqlFrame
+import net.sansa_stack.query.spark.SPARQLEngine
 import net.sansa_stack.rdf.spark.model.TripleOperations
 import org.apache.jena.graph.Triple
 import net.sansa_stack.rdf.spark.io._
@@ -172,30 +174,58 @@ object DirectParentsBuilder {
 
   def extract_CID_InchiKey(rootMsdDirectory : String,input : String) : RDD[(String,String)] = {
     val triples_asso_pmid_cid : RDD[Triple] = spark.rdf(Lang.TURTLE)(input)
-    println("=============  COUNT ========================")
-    println(s"COUNT:${triples_asso_pmid_cid.count()}")
 
     val triplesDataset : Dataset[Triple] = triples_asso_pmid_cid.toDS()
 
     implicit val enc: Encoder[String] = Encoders.STRING
 
+    /**
+     * 1) CID from PMID_CID
+     */
     val CIDs : RDD[String] = triplesDataset.map(
       (triple  : Triple ) => {
         triple.getObject.toString
       }
     ).rdd
 
-    println("2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222")
-    val pubchem = MsdPubChem(spark,rootDir=rootMsdDirectory)
-    val l = pubchem.getPathReferenceTypeFiles()
-    l.foreach(
-      u => println("******************"+u)
+    /**
+     * Inchikey linked with CID
+     */
+
+    val listRdfInchikeyFiles = MsdPubChem(spark,rootDir=rootMsdDirectory).getPathInchiKey2compoundFiles()
+
+    val finalCID_INCHI = listRdfInchikeyFiles.map(
+      pathFile => {
+        val dataset: Dataset[Triple] = spark.rdf(Lang.TURTLE)(pathFile).toDS()
+        val queryString: String =
+          "select ?cid ?inchi { ?cid <http://semanticscience.org/resource/is-attribute-of> ?inchi . }"
+
+        implicit val cidInchiEncoder = Encoders.product[(String,String)]
+
+        val sparqlFrame =
+          new SparqlFrame()
+            .setSparqlQuery(queryString)
+            .setQueryExcecutionEngine(SPARQLEngine.Sparqlify)
+        sparqlFrame.transform(dataset).map(
+          row => (row.get(1).toString,row.get(0).toString)
+        ).rdd
+          .join( CIDs.map( (_,"") ) ) /* Get the intersection with CID linked to a PMID here !!! */
+          .distinct
+          .map {
+            case (cid, (inchi,"")) => {
+              (cid.replace("http://rdf.ncbi.nlm.nih.gov/pubchem/compound/", ""),
+              inchi.replace("http://rdf.ncbi.nlm.nih.gov/pubchem/inchikey/", ""))
+            }
+          }
+          .collect()
+      }
+    ).flatten
+
+    println("TOTAL="+finalCID_INCHI.size)
+    finalCID_INCHI.foreach(
+      temp => { println("*************TEMP:"+temp.toString)}
     )
 
-    val l2 =pubchem.getPathInchiKey2compoundFiles()
-    l2.foreach(
-      u => println("******************"+u)
-    )
     println("2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222")
     CIDs.map(s => {(s->"")})
   }
