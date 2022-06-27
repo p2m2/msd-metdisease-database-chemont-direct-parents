@@ -172,6 +172,11 @@ object DirectParentsBuilder {
     spark.close()
   }
 
+  /**
+   * https://github.com/eMetaboHUB/Forum-DiseasesChem/blob/master/app/build/classyfire_functions.py#L120
+   * @param rootMsdDirectory
+   * @param input
+   */
   def extract_CID_InchiKey(rootMsdDirectory : String,input : String) : RDD[(String,String)] = {
     val triples_asso_pmid_cid : RDD[Triple] = spark.rdf(Lang.TURTLE)(input)
 
@@ -189,6 +194,10 @@ object DirectParentsBuilder {
     ).rdd
 
     /**
+     *
+     * This function is used to retrieve all ChemOnt classes associated to each molecules in df. As these processes are run in parralel, size of each created graph need to be exported in this function.
+     * This function return a table of 4 values: nb. triples in direct_parent graph file, nb. subjects in direct_parent graph file, nb. triples in Alternative_parent graph file, nb. subjects in Alternative_parent graph file
+     *
      * Inchikey linked with CID
      */
 
@@ -228,5 +237,10 @@ object DirectParentsBuilder {
 
     println("2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222")
     CIDs.map(s => {(s->"")})
+  }
+
+  //https://github.com/eMetaboHUB/Forum-DiseasesChem/blob/master/app/build/classyfire_functions.py#L22
+  def classify_df() = {
+
   }
 }
