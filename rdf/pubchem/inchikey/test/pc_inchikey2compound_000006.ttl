@@ -1,0 +1,5 @@
+@prefix sio:	<http://semanticscience.org/resource/> .
+@prefix inchikey:	<http://rdf.ncbi.nlm.nih.gov/pubchem/inchikey/> .
+@prefix compound:	<http://rdf.ncbi.nlm.nih.gov/pubchem/compound/> .
+inchikey:AAACELIWZNGDOY-UHFFFAYY6A-O	sio:is-attribute-of	compound:CID10313045 .
+inchikey:AAAIJRIEGUHNCI-WAKSJLJJSA-N	sio:is-attribute-of	compound:CID492222 .
