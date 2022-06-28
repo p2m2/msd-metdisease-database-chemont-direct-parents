@@ -1,15 +1,17 @@
 package fr.inrae.msd.rdf
 
 /* ToDS */
+import fr.inrae.semantic_web.ProvenanceBuilder
 import net.sansa_stack.ml.spark.featureExtraction.SparqlFrame
 import net.sansa_stack.query.spark.SPARQLEngine
+import net.sansa_stack.rdf.spark.io._
 import net.sansa_stack.rdf.spark.model.TripleOperations
 import org.apache.jena.graph.Triple
-import net.sansa_stack.rdf.spark.io._
 import org.apache.jena.riot.Lang
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.{Dataset, Encoder, Encoders, SparkSession}
+
+import java.util.Date
 /**
  * https://services.pfem.clermont.inrae.fr/gitlab/forum/metdiseasedatabase/-/blob/develop/app/build/import_PMID_CID.py
  * build/import_PMID_CID.py
@@ -20,7 +22,7 @@ import org.apache.spark.sql.{Dataset, Encoder, Encoders, SparkSession}
 To avoid => Exception in thread "main" java.lang.NoSuchMethodError: scala.runtime.Statics.releaseFence()V
 can not extends App
  */
-object DirectParentsBuilder {
+object DirectParentAndAltParentsChemontBuilder {
 
   import scopt.OParser
 
@@ -164,11 +166,42 @@ object DirectParentsBuilder {
              timeout : Int,
              verbose: Boolean,
              debug: Boolean) : Unit = {
+
+    val startBuild = new Date()
     println("============== Main Build ====================")
     println(s"categoryMsd=$categoryMsd,databaseMsd=$databaseMsd,versionMsd=$versionMsd")
 
+
     val CID_Inchs : RDD[(String,String)] = extract_CID_InchiKey(rootMsdDirectory,"./rdf/forum/PMID_CID/test/pmid_cid.ttl")
+    val graphs : RDD[(Triple,Seq[Triple])]  = ClassyFireRequest.buildCIDtypeOfChemontGraph(CID_Inchs)
+
     CID_Inchs.take(5).foreach(println)
+    graphs.take(5).foreach(println)
+
+    val graphDirectParent : RDD[Triple] = graphs.map( _._1 )
+    val graphAltParents : RDD[Triple] = graphs.flatMap( _._2 )
+
+    import net.sansa_stack.rdf.spark.io._
+    graphDirectParent.saveAsNTriplesFile(s"$rootMsdDirectory/$forumCategoryMsd/$forumDatabaseMsd/$versionMsd/classyfire_direct_parent.ttl",mode=SaveMode.Overwrite)
+    graphAltParents.saveAsNTriplesFile(s"$rootMsdDirectory/$forumCategoryMsd/$forumDatabaseMsd/$versionMsd/classyfire_alternative_parent.ttl",mode=SaveMode.Overwrite)
+
+    val contentProvenanceRDF : String =
+      ProvenanceBuilder.provSparkSubmit(
+        projectUrl ="https://github.com/p2m2/msd-metdisease-database-pmid-cid-builder",
+        category = forumCategoryMsd,
+        database = forumDatabaseMsd,
+        release=versionMsd,
+        startDate = startBuild,
+        spark
+      )
+
+    MsdUtils(
+      rootDir=rootMsdDirectory,
+      spark=spark,
+      category="prov",
+      database=forumDatabaseMsd,
+      version=versionMsd).writeFile(spark,contentProvenanceRDF,"msd-metdisease-database-pmid-cid-builder-"+versionMsd+".ttl")
+
     spark.close()
   }
 
@@ -203,44 +236,35 @@ object DirectParentsBuilder {
 
     val listRdfInchikeyFiles = MsdPubChem(spark,rootDir=rootMsdDirectory).getPathInchiKey2compoundFiles()
 
-    val finalCID_INCHI = listRdfInchikeyFiles.map(
-      pathFile => {
-        val dataset: Dataset[Triple] = spark.rdf(Lang.TURTLE)(pathFile).toDS()
-        val queryString: String =
-          "select ?cid ?inchi { ?cid <http://semanticscience.org/resource/is-attribute-of> ?inchi . }"
+    println("=====================================  CID/INCHI OF INTEREST ========================================= ")
 
-        implicit val cidInchiEncoder = Encoders.product[(String,String)]
 
-        val sparqlFrame =
-          new SparqlFrame()
-            .setSparqlQuery(queryString)
-            .setQueryExcecutionEngine(SPARQLEngine.Sparqlify)
-        sparqlFrame.transform(dataset).map(
-          row => (row.get(1).toString,row.get(0).toString)
-        ).rdd
-          .join( CIDs.map( (_,"") ) ) /* Get the intersection with CID linked to a PMID here !!! */
-          .distinct
-          .map {
-            case (cid, (inchi,"")) => {
-              (cid.replace("http://rdf.ncbi.nlm.nih.gov/pubchem/compound/", ""),
+      spark.sparkContext.union(
+      listRdfInchikeyFiles.map(pathFile => {
+      val dataset: Dataset[Triple] = spark.rdf(Lang.TURTLE)(pathFile).toDS()
+      val queryString: String =
+        "select ?cid ?inchi { ?cid <http://semanticscience.org/resource/is-attribute-of> ?inchi . }"
+
+      implicit val cidInchiEncoder: Encoder[(String, String)] = Encoders.product[(String, String)]
+
+      val sparqlFrame =
+        new SparqlFrame()
+          .setSparqlQuery(queryString)
+          .setQueryExcecutionEngine(SPARQLEngine.Sparqlify)
+      sparqlFrame.transform(dataset).map(
+        row => (row.get(1).toString, row.get(0).toString)
+      ).rdd
+        .join(CIDs.map((_, ""))) /* Get the intersection with CID linked to a PMID here !!! */
+        .distinct
+        .map {
+          case (cid, (inchi, "")) => {
+            (cid.replace("http://rdf.ncbi.nlm.nih.gov/pubchem/compound/", ""),
               inchi.replace("http://rdf.ncbi.nlm.nih.gov/pubchem/inchikey/", ""))
-            }
           }
-          .collect()
-      }
-    ).flatten
-
-    println("TOTAL="+finalCID_INCHI.size)
-    finalCID_INCHI.foreach(
-      temp => { println("*************TEMP:"+temp.toString)}
-    )
-
-    println("2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222")
-    CIDs.map(s => {(s->"")})
+        }
+    }))
+  //println("=====================================  CLASSYFIRE REQUEST ========================================= ")
+  //ClassyFireRequest.classyFire(finalCID_INCHI)
   }
 
-  //https://github.com/eMetaboHUB/Forum-DiseasesChem/blob/master/app/build/classyfire_functions.py#L22
-  def classify_df() = {
-
-  }
 }

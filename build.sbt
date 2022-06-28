@@ -12,21 +12,19 @@ lazy val root = (project in file("."))
     name := "msd-metdisease-database-chemont-direct-parents",
 
 		libraryDependencies ++= Seq(
-     // "org.apache.spark" %% "spark-core" % sparkVersion % "test,provided",
       "org.apache.spark" %% "spark-sql"  % sparkVersion % "provided,test",
       "org.apache.hadoop" % "hadoop-common" % "3.3.3" % "test,provided",
       "org.apache.hadoop" % "hadoop-client" % "3.3.3" % "test,provided",
-      //"org.apache.hadoop" % "hadoop-hdfs" % "3.3.3" % "test,provided",
       "org.apache.commons" % "commons-configuration2" % "2.7"  % "test,provided",
-   //   "com.fasterxml.jackson.core" % "jackson-databind" % "2.13.3" % "test,provided",
-   //   "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.13.3" % "test,provided",
       "net.sansa-stack" %% "sansa-rdf-spark" % "0.8.0-RC3" % "test,provided",
       ("net.sansa-stack" %% "sansa-ml-spark" % "0.8.0-RC3")
         .exclude("org.apache.zookeeper","zookeeper")
         .exclude("org.apache.hadoop","hadoop-common") % "test,provided"
       ,
       "com.lihaoyi" %% "requests" % "0.7.1",
-      "com.github.scopt" %% "scopt" % "4.0.1"
+      "com.lihaoyi" %% "upickle" % "2.0.0",
+      "com.github.scopt" %% "scopt" % "4.0.1",
+      "com.github.p2m2" %% "service-rdf-database-deployment" % "1.0.12"
     ),
     Compile / mainClass := Some("fr.inrae.msd.rdf.DirectParentsBuilder"),
     Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat,
