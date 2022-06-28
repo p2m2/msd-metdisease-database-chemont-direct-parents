@@ -9,7 +9,7 @@ lazy val slf4j_version = "1.7.36"
 
 lazy val root = (project in file("."))
   .settings(
-    name := "msd-metdisease-database-chemont-direct-parents",
+    name := "msd-metdisease-database-chemont-parents-builder",
 
 		libraryDependencies ++= Seq(
       "org.apache.spark" %% "spark-sql"  % sparkVersion % "provided,test",
@@ -26,7 +26,7 @@ lazy val root = (project in file("."))
       "com.github.scopt" %% "scopt" % "4.0.1",
       "com.github.p2m2" %% "service-rdf-database-deployment" % "1.0.12"
     ),
-    Compile / mainClass := Some("fr.inrae.msd.rdf.DirectParentsBuilder"),
+    Compile / mainClass := Some("fr.inrae.msd.rdf.DirectParentAndAltParentsChemontBuilder"),
     Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat,
     resolvers ++= Seq(
       "AKSW Maven Releases" at "https://maven.aksw.org/archiva/repository/internal",
@@ -41,7 +41,7 @@ lazy val root = (project in file("."))
     ),
     Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oD"),
     assembly / target := file("assembly"),
-      assembly / assemblyJarName := s"msd-metdisease-database-chemont-direct-parents.jar",
+      assembly / assemblyJarName := s"msd-metdisease-database-chemont-parents-builder.jar",
     assembly / logLevel := Level.Info,
     assembly / assemblyMergeStrategy := {
      //case PathList("META-INF", xs @ _*) => MergeStrategy.last

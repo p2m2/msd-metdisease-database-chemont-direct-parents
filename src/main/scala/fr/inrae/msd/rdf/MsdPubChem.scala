@@ -1,16 +1,12 @@
 package fr.inrae.msd.rdf
 
-import net.sansa_stack.query.spark.api.domain.ResultSetSpark
-import net.sansa_stack.query.spark.sparqlify.QueryEngineFactorySparqlify
 import net.sansa_stack.ml.spark.featureExtraction.SparqlFrame
 import net.sansa_stack.query.spark.SPARQLEngine
-
-import net.sansa_stack.rdf.spark.model.TripleOperations
-import org.apache.jena.graph.{NodeFactory, Triple}
+import net.sansa_stack.query.spark.sparqlify.QueryEngineFactorySparqlify
 import net.sansa_stack.rdf.spark.io._
+import net.sansa_stack.rdf.spark.model.TripleOperations
+import org.apache.jena.graph.Triple
 import org.apache.jena.riot.Lang
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.{Dataset, Encoder, Encoders, SparkSession}
 
 

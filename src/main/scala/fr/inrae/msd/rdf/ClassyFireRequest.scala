@@ -4,7 +4,7 @@ import org.apache.jena.graph.{NodeFactory, Triple}
 import org.apache.jena.vocabulary.RDF
 import org.apache.spark.rdd.RDD
 
-import scala.language.postfixOps
+import scala.language.{existentials, postfixOps}
 import scala.util.{Failure, Success, Try}
 
 case object ClassyFireRequest {
@@ -45,12 +45,13 @@ case object ClassyFireRequest {
    * @param CID
    * @param InchiKey
    */
-  def getEntityFromClassyFire(CID : String , inchiKey  : String) : (Triple,Seq[Triple]) = {
+  def getEntityFromClassyFire(CID : String , inchiKey  : String) : Option[(Triple,Seq[Triple])] = {
     val p = requests.get(
       s"http://classyfire.wishartlab.com/entities/$inchiKey.json",
       headers=Map("Content-Type"-> "application/json")
     )
-    buildTriplesDirectParentAndAltParents(p.text,CID)
+
+    Some(buildTriplesDirectParentAndAltParents(p.text,CID))
   }
 
   // Returning a Try[T] wrapper
@@ -61,6 +62,10 @@ case object ClassyFireRequest {
       case Success(x) => x
       case Failure(e) if n > 0 => {
         println(e.getMessage)
+        if (e.getMessage.contains(":404")) {
+          /* unkown INCHIKEY */
+          throw new Exception("stop retry")
+        }
         println(s"***RETRY $n")
         Thread.sleep(durationRetry)
         retry(n - 1)(fn)
@@ -77,10 +82,11 @@ case object ClassyFireRequest {
   def buildCIDtypeOfChemontGraph(cidInchikeyList : RDD[(String,String)]): RDD[(Triple, Seq[Triple])] = {
 
     cidInchikeyList
+      .repartition(12) /* 10 request / executions to classifyre in a same time */
       .flatMap{
         case (cid,inchiKey) =>
         Try(retry(retryNum)(getEntityFromClassyFire(cid,inchiKey))) match {
-          case Success(v) => Some(v)
+          case Success(v) => v
           case Failure(_) => None
         }
       }

@@ -5,7 +5,6 @@ import fr.inrae.semantic_web.ProvenanceBuilder
 import net.sansa_stack.ml.spark.featureExtraction.SparqlFrame
 import net.sansa_stack.query.spark.SPARQLEngine
 import net.sansa_stack.rdf.spark.io._
-import net.sansa_stack.rdf.spark.model.TripleOperations
 import org.apache.jena.graph.Triple
 import org.apache.jena.riot.Lang
 import org.apache.spark.rdd.RDD
@@ -29,9 +28,7 @@ object DirectParentAndAltParentsChemontBuilder {
   case class Config(
                      rootMsdDirectory : String = "/rdf",
                      forumCategoryMsd : String = "forum",
-                     forumDatabaseMsd : String = "PMID_CID",
-                     pubchemCategoryMsd : String = "pubchem", //"/rdf/pubchem/compound-general/2021-11-23",
-                     pubchemDatabaseMsd : String = "reference", // "/rdf/pubchem/reference/2021-11-23",
+                     forumDatabaseMsd : String = "ClassyFire",
                      pubchemVersionMsd: Option[String] = None,
                      referenceUriPrefix: String = "http://rdf.ncbi.nlm.nih.gov/pubchem/reference/PMID",
                      packSize : Int = 5000,
@@ -44,8 +41,8 @@ object DirectParentAndAltParentsChemontBuilder {
   val parser1 = {
     import builder._
     OParser.sequence(
-      programName("msd-metdisease-database-chemont-direct-parents"),
-      head("msd-metdisease-database-chemont-direct-parents", "1.0"),
+      programName("msd-metdisease-database-chemont-parents"),
+      head("msd-metdisease-database-chemont-parents", "1.0"),
       opt[String]('d', "rootMsdDirectory")
         .optional()
         .valueName("<rootMsdDirectory>")
@@ -93,7 +90,7 @@ object DirectParentAndAltParentsChemontBuilder {
   }
   val spark = SparkSession
     .builder()
-    .appName("msd-metdisease-database-chemont-direct-parents")
+    .appName("msd-metdisease-database-chemont-parents-builder")
     .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     .config("spark.kryo.registrator", String.join(
       ", ",
@@ -113,14 +110,12 @@ object DirectParentAndAltParentsChemontBuilder {
           config.rootMsdDirectory,
           config.forumCategoryMsd,
           config.forumDatabaseMsd,
-          config.pubchemCategoryMsd,
-          config.pubchemDatabaseMsd,
           config.pubchemVersionMsd match {
             case Some(version) => version
             case None => MsdUtils(
               rootDir=config.rootMsdDirectory,
-              category=config.pubchemCategoryMsd,
-              database=config.pubchemDatabaseMsd,spark=spark).getLastVersion()
+              category=config.forumCategoryMsd,
+              database="PMID_CID",spark=spark).getLastVersion
           },
           config.referenceUriPrefix,
           config.packSize,
@@ -157,8 +152,6 @@ object DirectParentAndAltParentsChemontBuilder {
              rootMsdDirectory : String,
              forumCategoryMsd : String,
              forumDatabaseMsd : String,
-             categoryMsd : String,
-             databaseMsd : String,
              versionMsd: String,
              referenceUriPrefix: String,
              packSize : Int,
@@ -169,25 +162,24 @@ object DirectParentAndAltParentsChemontBuilder {
 
     val startBuild = new Date()
     println("============== Main Build ====================")
-    println(s"categoryMsd=$categoryMsd,databaseMsd=$databaseMsd,versionMsd=$versionMsd")
 
-
-    val CID_Inchs : RDD[(String,String)] = extract_CID_InchiKey(rootMsdDirectory,"./rdf/forum/PMID_CID/test/pmid_cid.ttl")
+    val CID_Inchs : RDD[(String,String)] = extract_CID_InchiKey(rootMsdDirectory,s"$rootMsdDirectory/$forumCategoryMsd/PMID_CID/$versionMsd/pmid_cid.ttl")
     val graphs : RDD[(Triple,Seq[Triple])]  = ClassyFireRequest.buildCIDtypeOfChemontGraph(CID_Inchs)
 
     CID_Inchs.take(5).foreach(println)
     graphs.take(5).foreach(println)
 
+    import net.sansa_stack.rdf.spark.io._
+
     val graphDirectParent : RDD[Triple] = graphs.map( _._1 )
     val graphAltParents : RDD[Triple] = graphs.flatMap( _._2 )
 
-    import net.sansa_stack.rdf.spark.io._
-    graphDirectParent.saveAsNTriplesFile(s"$rootMsdDirectory/$forumCategoryMsd/$forumDatabaseMsd/$versionMsd/classyfire_direct_parent.ttl",mode=SaveMode.Overwrite)
-    graphAltParents.saveAsNTriplesFile(s"$rootMsdDirectory/$forumCategoryMsd/$forumDatabaseMsd/$versionMsd/classyfire_alternative_parent.ttl",mode=SaveMode.Overwrite)
+    graphDirectParent.saveAsNTriplesFile(s"$rootMsdDirectory/$forumCategoryMsd/ClassyFire/$versionMsd/direct_parent.ttl",mode=SaveMode.Overwrite)
+    graphAltParents.saveAsNTriplesFile(s"$rootMsdDirectory/$forumCategoryMsd/ClassyFire/$versionMsd/alternative_parents.ttl",mode=SaveMode.Overwrite)
 
     val contentProvenanceRDF : String =
       ProvenanceBuilder.provSparkSubmit(
-        projectUrl ="https://github.com/p2m2/msd-metdisease-database-pmid-cid-builder",
+        projectUrl ="https://github.com/p2m2/msd-metdisease-database-chemont-parents-builder",
         category = forumCategoryMsd,
         database = forumDatabaseMsd,
         release=versionMsd,
@@ -199,8 +191,8 @@ object DirectParentAndAltParentsChemontBuilder {
       rootDir=rootMsdDirectory,
       spark=spark,
       category="prov",
-      database=forumDatabaseMsd,
-      version=versionMsd).writeFile(spark,contentProvenanceRDF,"msd-metdisease-database-pmid-cid-builder-"+versionMsd+".ttl")
+      database="ClassyFire",
+      version=versionMsd).writeFile(spark,contentProvenanceRDF,"msd-metdisease-database-chemont-parents-builder-"+versionMsd+".ttl")
 
     spark.close()
   }
@@ -211,6 +203,8 @@ object DirectParentAndAltParentsChemontBuilder {
    * @param input
    */
   def extract_CID_InchiKey(rootMsdDirectory : String,input : String) : RDD[(String,String)] = {
+    import net.sansa_stack.rdf.spark.model.TripleOperations
+
     val triples_asso_pmid_cid : RDD[Triple] = spark.rdf(Lang.TURTLE)(input)
 
     val triplesDataset : Dataset[Triple] = triples_asso_pmid_cid.toDS()
@@ -263,8 +257,6 @@ object DirectParentAndAltParentsChemontBuilder {
           }
         }
     }))
-  //println("=====================================  CLASSYFIRE REQUEST ========================================= ")
-  //ClassyFireRequest.classyFire(finalCID_INCHI)
   }
 
 }
