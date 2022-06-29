@@ -2,10 +2,8 @@ package fr.inrae.msd.rdf
 
 /* ToDS */
 import fr.inrae.semantic_web.ProvenanceBuilder
-import net.sansa_stack.ml.spark.featureExtraction.SparqlFrame
-import net.sansa_stack.query.spark.SPARQLEngine
 import net.sansa_stack.rdf.spark.io._
-import org.apache.jena.graph.Triple
+import org.apache.jena.graph.{Node, NodeFactory, Triple}
 import org.apache.jena.riot.Lang
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Encoder, Encoders, SparkSession}
@@ -166,8 +164,8 @@ object DirectParentAndAltParentsChemontBuilder {
     val CID_Inchs : RDD[(String,String)] = extract_CID_InchiKey(rootMsdDirectory,s"$rootMsdDirectory/$forumCategoryMsd/PMID_CID/$versionMsd/pmid_cid.ttl")
     val graphs : RDD[(Triple,Seq[Triple])]  = ClassyFireRequest.buildCIDtypeOfChemontGraph(CID_Inchs)
 
-    CID_Inchs.take(5).foreach(println)
-    graphs.take(5).foreach(println)
+    //CID_Inchs.take(5).foreach(println)
+    //graphs.take(5).foreach(println)
 
     import net.sansa_stack.rdf.spark.io._
 
@@ -236,18 +234,21 @@ object DirectParentAndAltParentsChemontBuilder {
       spark.sparkContext.union(
       listRdfInchikeyFiles.map(pathFile => {
       val dataset: Dataset[Triple] = spark.rdf(Lang.TURTLE)(pathFile).toDS()
+     /*
       val queryString: String =
         "select ?cid ?inchi { ?cid <http://semanticscience.org/resource/is-attribute-of> ?inchi . }"
-
+*/
       implicit val cidInchiEncoder: Encoder[(String, String)] = Encoders.product[(String, String)]
+        val isAttributeOf : Node = NodeFactory.createURI("http://semanticscience.org/resource/is-attribute-of")
 
-      val sparqlFrame =
-        new SparqlFrame()
-          .setSparqlQuery(queryString)
-          .setQueryExcecutionEngine(SPARQLEngine.Sparqlify)
-      sparqlFrame.transform(dataset).map(
-        row => (row.get(1).toString, row.get(0).toString)
-      ).rdd
+        dataset
+          .filter(_.getPredicate.matches(isAttributeOf))
+          .map(
+          (triple  : Triple ) => {
+            (triple.getObject.toString,triple.getSubject.toString)
+          }
+        )
+          .rdd
         .join(CIDs.map((_, ""))) /* Get the intersection with CID linked to a PMID here !!! */
         .distinct
         .map {

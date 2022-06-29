@@ -62,7 +62,7 @@ case object ClassyFireRequest {
       case Success(x) => x
       case Failure(e) if n > 0 => {
         println(e.getMessage)
-        if (e.getMessage.contains(":404")) {
+        if (e.getMessage.contains(":404") || e.getMessage.contains("public/404.html")) {
           /* unkown INCHIKEY */
           throw new Exception("stop retry")
         }
@@ -82,7 +82,7 @@ case object ClassyFireRequest {
   def buildCIDtypeOfChemontGraph(cidInchikeyList : RDD[(String,String)]): RDD[(Triple, Seq[Triple])] = {
 
     cidInchikeyList
-      .repartition(12) /* 10 request / executions to classifyre in a same time */
+      .repartition(1) /* 12 request / executions to classifyre in a same time */
       .flatMap{
         case (cid,inchiKey) =>
         Try(retry(retryNum)(getEntityFromClassyFire(cid,inchiKey))) match {

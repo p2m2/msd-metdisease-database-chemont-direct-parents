@@ -11,12 +11,27 @@ https://github.com/SANSA-Stack/SANSA-Stack/tags
 ## run example
 
 --num-executors 1 
+### Local 
 
-``` 
+```shell
 /usr/local/share/spark/bin/spark-submit \
   --conf "spark.eventLog.enabled=true" \
   --conf "spark.eventLog.dir=file:///tmp/spark-events"  \
   --executor-memory 1G  \
   --num-executors 1   \
   --jars ./sansa-ml-spark_2.12-0.8.0-RC3-SNAPSHOT-jar-with-dependencies.jar assembly/msd-metdisease-database-chemont-parents-builder.jar -d ./rdf -r test
+```
+
+### MSD 
+
+```shell
+spark-submit  \
+ --deploy-mode cluster \
+ --executor-memory 8G \
+ --num-executors 5 \
+ --conf spark.yarn.appMasterEnv.JAVA_HOME="/usr/local/openjdk/jdk-12.0.2+10/" \
+ --conf spark.executorEnv.JAVA_HOME="/usr/local/openjdk/jdk-12.0.2+10/"  \
+ --conf spark.yarn.submit.waitAppCompletion="false" \
+ --jars /usr/share/java/sansa-stack-spark_2.12-0.8.4_ExDistAD.jar \
+ msd-metdisease-database-chemont-parents-builder.jar
 ```
