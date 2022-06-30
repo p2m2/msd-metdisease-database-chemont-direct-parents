@@ -1,8 +1,6 @@
 package fr.inrae.msd.rdf
 
-import org.apache.jena.graph.{NodeFactory, Triple}
-import org.apache.jena.vocabulary.RDF
-import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Dataset, Encoder, Encoders}
 
 import scala.language.{existentials, postfixOps}
 import scala.util.{Failure, Success, Try}
@@ -11,30 +9,21 @@ case object ClassyFireRequest {
 
   val durationRetry : Int   = 10000 /* milliseconds */
   val retryNum      : Int   = 10
+  type ResultSetDirectParentAndAltPerents =  (Option[(String,String)],Option[(Seq[String],String)])
 
-  def buildTriplesDirectParentAndAltParents(responseRequest : String, CID : String) : (Option[Triple],Option[Seq[Triple]]) = {
+  def buildTriplesDirectParentAndAltParents(responseRequest : String,CID : String)
+  : ResultSetDirectParentAndAltPerents = {
 
     val data = ujson.read(responseRequest)
     val tripleDirectParent =
-      Try(data("direct_parent")("chemont_id").value.toString.replace("CHEMONTID:","http://purl.obolibrary.org/obo/CHEMONTID_")) match {
-        case Success(uriDirectParent) => Some(Triple.create(
-          NodeFactory.createURI(s"http://rdf.ncbi.nlm.nih.gov/pubchem/compound/$CID"),
-          RDF.`type`.asNode(),
-          NodeFactory.createURI(uriDirectParent))
-        )
+      Try(data("direct_parent")("chemont_id").value.toString) match {
+        case Success(uriDirectParent) => Some((uriDirectParent,CID))
         case Failure(_) => None
       }
 
     val listTriplesAltParents  =
-      Try(data("alternative_parents").arr.map( r => r("chemont_id").value.toString.replace("CHEMONTID:","http://purl.obolibrary.org/obo/CHEMONTID_") ))  match {
-        case Success(listUrisAltParents) =>
-          Some(listUrisAltParents.map(
-            uri => Triple.create(
-              NodeFactory.createURI(s"http://rdf.ncbi.nlm.nih.gov/pubchem/compound/$CID"),
-              RDF.`type`.asNode(),
-              NodeFactory.createURI(uri)
-            )
-          ))
+      Try(data("alternative_parents").arr.map( r => r("chemont_id").value.toString))  match {
+        case Success(listUrisAltParents) => Some(listUrisAltParents,CID)
         case Failure(_) => None
       }
 
@@ -51,7 +40,7 @@ case object ClassyFireRequest {
    * @param CID
    * @param InchiKey
    */
-  def getEntityFromClassyFire(CID : String , inchiKey  : String) : Option[(Option[Triple],Option[Seq[Triple]])] = {
+  def getEntityFromClassyFire(CID : String , inchiKey  : String) : Option[ResultSetDirectParentAndAltPerents] = {
     val p = requests.get(
       s"http://classyfire.wishartlab.com/entities/$inchiKey.json",
       headers=Map("Content-Type"-> "application/json")
@@ -85,14 +74,14 @@ case object ClassyFireRequest {
    * @param cidInchikeyList
    * @return Triple DirectParent and a list of Alternative Parent
    */
-  def buildCIDtypeOfChemontGraph(cidInchikeyList : RDD[(String,String)]): RDD[(Option[Triple], Option[Seq[Triple]])] = {
-
+  def buildCIDtypeOfChemontGraph(cidInchikeyList : Dataset[CIDAndInchiKey]): Dataset[ResultSetDirectParentAndAltPerents] = {
+    implicit val cidEncoder: Encoder[ResultSetDirectParentAndAltPerents] = Encoders.product[ResultSetDirectParentAndAltPerents]
     cidInchikeyList
       .distinct()
     //  .repartition(1) /* 12 request / executions to classifyre in a same time */
       .flatMap{
-        case (cid,inchiKey) =>
-        Try(retry(retryNum)(getEntityFromClassyFire(cid,inchiKey))) match {
+        case (v) =>
+        Try(retry(retryNum)(getEntityFromClassyFire(v.cid,v.inchikey))) match {
           case Success(v) => v
           case Failure(_) => None
         }

@@ -1,10 +1,12 @@
 package fr.inrae.msd.rdf
 
 /* ToDS */
+import fr.inrae.msd.rdf.ClassyFireRequest.ResultSetDirectParentAndAltPerents
 import fr.inrae.semantic_web.ProvenanceBuilder
 import net.sansa_stack.rdf.spark.io._
 import org.apache.jena.graph.{Node, NodeFactory, Triple}
 import org.apache.jena.riot.Lang
+import org.apache.jena.vocabulary.RDF
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Encoder, Encoders, SparkSession}
 
@@ -25,7 +27,7 @@ object DirectParentAndAltParentsChemontBuilder {
 
   case class Config(
                      rootMsdDirectory : String = "/rdf",
-                     forumCategoryMsd : String = "forum",
+                     forumCategoryMsd : String = "forum/DiseaseChem",
                      forumDatabaseMsd : String = "ClassyFire",
                      pubchemVersionMsd: Option[String] = None,
                      referenceUriPrefix: String = "http://rdf.ncbi.nlm.nih.gov/pubchem/reference/PMID",
@@ -86,7 +88,7 @@ object DirectParentAndAltParentsChemontBuilder {
       checkConfig(_ => success)
     )
   }
-  val spark = SparkSession
+  val spark: SparkSession = SparkSession
     .builder()
     .appName("msd-metdisease-database-chemont-parents-builder")
     .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -96,6 +98,8 @@ object DirectParentAndAltParentsChemontBuilder {
       "net.sansa_stack.query.spark.ontop.OntopKryoRegistrator",
       "net.sansa_stack.query.spark.sparqlify.KryoRegistratorSparqlify"))
     .getOrCreate()
+
+  spark.sparkContext.setLogLevel("WARN")
 
   def main(args: Array[String]): Unit = {
 
@@ -161,16 +165,34 @@ object DirectParentAndAltParentsChemontBuilder {
     val startBuild = new Date()
     println("============== Main Build ====================")
 
-    val CID_Inchs : RDD[(String,String)] = extract_CID_InchiKey(rootMsdDirectory,s"$rootMsdDirectory/$forumCategoryMsd/PMID_CID/$versionMsd/pmid_cid.ttl")
-    val graphs : RDD[(Option[Triple],Option[Seq[Triple]])]  = ClassyFireRequest.buildCIDtypeOfChemontGraph(CID_Inchs)
+    val CID_Inchs : Dataset[CIDAndInchiKey] = extract_CID_InchiKey(rootMsdDirectory,s"$rootMsdDirectory/$forumCategoryMsd/PMID_CID/$versionMsd/pmid_cid.ttl")
+    val graphs : Dataset[ResultSetDirectParentAndAltPerents]  = ClassyFireRequest.buildCIDtypeOfChemontGraph(CID_Inchs)
+
+
+    implicit val stringStringEncoder: Encoder[(String,String)] = Encoders.product[(String,String)]
+    implicit val seqStringStringEncoder: Encoder[(Seq[String],String)] = Encoders.product[(Seq[String],String)]
+
+    val graphDirectParent : Dataset[(String,String)] = graphs.flatMap( _._1 )
+    val graphAltParents : Dataset[(Seq[String],String)] = graphs.flatMap( _._2 )
 
     import net.sansa_stack.rdf.spark.io._
 
-    val graphDirectParent : RDD[Triple] = graphs.flatMap( _._1 )
-    val graphAltParents : RDD[Triple] = graphs.flatMap {  case (_ ,v) => v.getOrElse(Seq()) }
+    graphDirectParent.rdd.map {
+      case(chemontId,cid) => Triple.create(
+        NodeFactory.createURI(s"http://rdf.ncbi.nlm.nih.gov/pubchem/compound/$cid"),
+        RDF.`type`.asNode(),
+        NodeFactory.createURI(chemontId.replace("CHEMONTID:","http://purl.obolibrary.org/obo/CHEMONTID_")))
+    } saveAsNTriplesFile(s"$rootMsdDirectory/$forumCategoryMsd/ClassyFire/$versionMsd/direct_parent.ttl",mode=SaveMode.Overwrite)
 
-    graphDirectParent.saveAsNTriplesFile(s"$rootMsdDirectory/$forumCategoryMsd/ClassyFire/$versionMsd/direct_parent.ttl",mode=SaveMode.Overwrite)
-    graphAltParents.saveAsNTriplesFile(s"$rootMsdDirectory/$forumCategoryMsd/ClassyFire/$versionMsd/alternative_parents.ttl",mode=SaveMode.Overwrite)
+    graphAltParents.rdd.flatMap {
+      case(listChemontOd,cid) => listChemontOd.map(
+        uri => Triple.create(
+          NodeFactory.createURI(s"http://rdf.ncbi.nlm.nih.gov/pubchem/compound/$cid"),
+          RDF.`type`.asNode(),
+          NodeFactory.createURI(uri.replace("CHEMONTID:","http://purl.obolibrary.org/obo/CHEMONTID_"))
+        )
+      )
+    } saveAsNTriplesFile(s"$rootMsdDirectory/$forumCategoryMsd/ClassyFire/$versionMsd/alternative_parents.ttl",mode=SaveMode.Overwrite)
 
     val contentProvenanceRDF : String =
       ProvenanceBuilder.provSparkSubmit(
@@ -191,63 +213,27 @@ object DirectParentAndAltParentsChemontBuilder {
 
     spark.close()
   }
-/*
-  def extract_CID_InchiKey(rootMsdDirectory : String,input : String) : RDD[(String,String)] = {
-    import net.sansa_stack.rdf.spark.model.TripleOperations
 
-    val triples_asso_pmid_cid : RDD[Triple] = spark.rdf(Lang.TURTLE)(input)
-
-    val triplesDataset : Dataset[Triple] = triples_asso_pmid_cid.toDS()
-
-    implicit val enc: Encoder[String] = Encoders.STRING
-    /**
-     * 1) CID from PMID_CID
-     */
-    val CIDs : Dataset[String] = triplesDataset.map(
-      (triple  : Triple ) => {
-        triple.getObject.toString
-      }
-    )
-
-    (CIDs.rdd.map(
-      cid => {
-        val listRdfInchikeyFiles = MsdPubChem(spark,rootDir=rootMsdDirectory).getPathInchiKey2compoundFiles()
-        spark.sparkContext.union(listRdfInchikeyFiles.map(pathFile => {
-          val dataset: Dataset[Triple] = spark.rdf(Lang.TURTLE)(pathFile).toDS()
-          implicit val cidInchiEncoder: Encoder[(String, String)] = Encoders.product[(String, String)]
-          dataset
-            .filter(_.getObject.toString == cid)
-            .filter(_.getPredicate.toString == "http://semanticscience.org/resource/is-attribute-of")
-            .map(
-              (triple  : Triple ) => {
-                (triple.getObject.toString,triple.getSubject.toString)
-              }
-            ).rdd
-        }))
-      }
-    ))
-  }
-*/
   /**
    * https://github.com/eMetaboHUB/Forum-DiseasesChem/blob/master/app/build/classyfire_functions.py#L120
    * @param rootMsdDirectory
    * @param input
    */
-  def extract_CID_InchiKey(rootMsdDirectory : String,input : String) : RDD[(String,String)] = {
+  def extract_CID_InchiKey(rootMsdDirectory : String,input : String) : Dataset[CIDAndInchiKey] = {
     import net.sansa_stack.rdf.spark.model.TripleOperations
 
     val triples_asso_pmid_cid : RDD[Triple] = spark.rdf(Lang.TURTLE)(input)
 
     val triplesDataset : Dataset[Triple] = triples_asso_pmid_cid.toDS()
 
-    implicit val enc: Encoder[String] = Encoders.STRING
+    implicit val cidEncoder: Encoder[CID] = Encoders.product[CID]
 
     /**
      * 1) CID from PMID_CID
      */
-    val CIDs : Dataset[String] = triplesDataset.map(
+    val CIDFromPmids : Dataset[CID] = triplesDataset.map(
       (triple  : Triple ) => {
-        triple.getObject.toString
+        CID(triple.getObject.toString)
       }
     ).distinct()
 
@@ -262,40 +248,32 @@ object DirectParentAndAltParentsChemontBuilder {
     val listRdfInchikeyFiles = MsdPubChem(spark,rootDir=rootMsdDirectory).getPathInchiKey2compoundFiles()
 
     println("=====================================  CID/INCHI OF INTEREST ========================================= ")
+    implicit val cidInchiEncoder: Encoder[CIDAndInchiKey] = Encoders.product[CIDAndInchiKey]
 
-      spark.sparkContext.union(
+    spark.emptyDataset[CIDAndInchiKey].union(
       listRdfInchikeyFiles.map(pathFile => {
-      val dataset: Dataset[Triple] = spark.rdf(Lang.TURTLE)(pathFile).toDS()
-     /*
-      val queryString: String =
-        "select ?cid ?inchi { ?cid <http://semanticscience.org/resource/is-attribute-of> ?inchi . }"
-*/
-      implicit val cidInchiEncoder: Encoder[(String, String)] = Encoders.product[(String, String)]
+        val dataset: Dataset[Triple] = spark.rdf(Lang.TURTLE)(pathFile).toDS()
+
         val isAttributeOf : Node = NodeFactory.createURI("http://semanticscience.org/resource/is-attribute-of")
 
-        dataset
+        val pubchemList  = dataset
           .filter(_.getPredicate.matches(isAttributeOf))
           .map(
-          (triple  : Triple ) => {
-            (triple.getObject.toString,triple.getSubject.toString)
-          })
-          .join(CIDs.map((_, ""))) /* Get the intersection with CID linked to a PMID here !!! */
-          //.repartition(8000)
-          //.distinct()
-          /*
-          .filter {
-          case (cid, _ ) => CIDs.filter( _ == cid ).count() >0
-          }*/
-        .map {
-          case row => {
-           // println(row.get(0),row.get(1))
-            val cid : String = row.get(0).asInstanceOf[String]
-            val inchi : String = row.get(1).asInstanceOf[String]
-            (cid.replace("http://rdf.ncbi.nlm.nih.gov/pubchem/compound/", ""),
+            (triple  : Triple ) => {
+              CIDAndInchiKey(triple.getObject.toString,triple.getSubject.toString)
+            })
+
+        pubchemList.show(truncate=false)
+        val joined = pubchemList.join(CIDFromPmids,pubchemList("cid")===CIDFromPmids("cid")) /* Get the intersection with CID linked to a PMID here !!! */
+
+        joined.map {
+          case row =>
+            val cid : String  = row.getString(0)
+            val inchi : String = row.getString(1)
+            CIDAndInchiKey(cid.replace("http://rdf.ncbi.nlm.nih.gov/pubchem/compound/", ""),
               inchi.replace("http://rdf.ncbi.nlm.nih.gov/pubchem/inchikey/", ""))
-          }
-        }.rdd
-    })
+        }
+    }).reduce((x, y) => x.union(y))
     )
   }
 
