@@ -11,12 +11,14 @@ https://github.com/SANSA-Stack/SANSA-Stack/tags
 ## run example
 
 --num-executors 1 
+
 ### Local 
 
 ```shell
 /usr/local/share/spark/bin/spark-submit \
   --conf "spark.eventLog.enabled=true" \
   --conf "spark.eventLog.dir=file:///tmp/spark-events"  \
+  --driver-memory 2G \
   --executor-memory 1G  \
   --num-executors 1   \
   --jars ./sansa-ml-spark_2.12-0.8.0-RC3-SNAPSHOT-jar-with-dependencies.jar assembly/msd-metdisease-database-chemont-parents-builder.jar -d ./rdf -r test
