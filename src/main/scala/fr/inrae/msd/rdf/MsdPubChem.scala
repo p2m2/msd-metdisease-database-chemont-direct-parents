@@ -4,7 +4,6 @@ import net.sansa_stack.ml.spark.featureExtraction.SparqlFrame
 import net.sansa_stack.query.spark.SPARQLEngine
 import net.sansa_stack.query.spark.sparqlify.QueryEngineFactorySparqlify
 import net.sansa_stack.rdf.spark.io._
-import net.sansa_stack.rdf.spark.model.TripleOperations
 import org.apache.jena.graph.Triple
 import org.apache.jena.riot.Lang
 import org.apache.spark.sql.{Dataset, Encoder, Encoders, SparkSession}
@@ -38,6 +37,8 @@ case class MsdPubChem(
   val queryEngineFactory = new QueryEngineFactorySparqlify(spark)
 
   /* void pubchem as a Dataset */
+  import net.sansa_stack.rdf.spark.io._
+  import net.sansa_stack.rdf.spark.model.TripleOperations
   val voidRdd : Dataset [Triple] = spark.rdf(Lang.TURTLE)(s"$rootDir/$category/$database/$version").toDS()
 
   def uri(prefix: String, name : String) : String = "<"+prefixes.getOrElse(prefix,"")+name+">"

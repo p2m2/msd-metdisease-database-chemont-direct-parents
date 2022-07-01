@@ -6,7 +6,6 @@ import fr.inrae.semantic_web.ProvenanceBuilder
 import net.sansa_stack.rdf.spark.io._
 import org.apache.jena.graph.{Node, NodeFactory, Triple}
 import org.apache.jena.riot.Lang
-import org.apache.jena.vocabulary.RDF
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Encoder, Encoders, SparkSession}
 
@@ -175,24 +174,8 @@ object DirectParentAndAltParentsChemontBuilder {
     val graphDirectParent : Dataset[(String,String)] = graphs.flatMap( _._1 )
     val graphAltParents : Dataset[(Seq[String],String)] = graphs.flatMap( _._2 )
 
-    import net.sansa_stack.rdf.spark.io._
+    WriterCidChemont(rootMsdDirectory,forumCategoryMsd,versionMsd).write(graphDirectParent,graphAltParents)
 
-    graphDirectParent.rdd.map {
-      case(chemontId,cid) => Triple.create(
-        NodeFactory.createURI(s"http://rdf.ncbi.nlm.nih.gov/pubchem/compound/$cid"),
-        RDF.`type`.asNode(),
-        NodeFactory.createURI(chemontId.replace("CHEMONTID:","http://purl.obolibrary.org/obo/CHEMONTID_")))
-    } saveAsNTriplesFile(s"$rootMsdDirectory/$forumCategoryMsd/ClassyFire/$versionMsd/direct_parent.ttl",mode=SaveMode.Overwrite)
-
-    graphAltParents.rdd.flatMap {
-      case(listChemontOd,cid) => listChemontOd.map(
-        uri => Triple.create(
-          NodeFactory.createURI(s"http://rdf.ncbi.nlm.nih.gov/pubchem/compound/$cid"),
-          RDF.`type`.asNode(),
-          NodeFactory.createURI(uri.replace("CHEMONTID:","http://purl.obolibrary.org/obo/CHEMONTID_"))
-        )
-      )
-    } saveAsNTriplesFile(s"$rootMsdDirectory/$forumCategoryMsd/ClassyFire/$versionMsd/alternative_parents.ttl",mode=SaveMode.Overwrite)
 
     val contentProvenanceRDF : String =
       ProvenanceBuilder.provSparkSubmit(
@@ -263,7 +246,7 @@ object DirectParentAndAltParentsChemontBuilder {
               CIDAndInchiKey(triple.getObject.toString,triple.getSubject.toString)
             })
 
-        pubchemList.show(truncate=false)
+        //pubchemList.show(truncate=false)
         val joined = pubchemList.join(CIDFromPmids,pubchemList("cid")===CIDFromPmids("cid")) /* Get the intersection with CID linked to a PMID here !!! */
 
         joined.map {
