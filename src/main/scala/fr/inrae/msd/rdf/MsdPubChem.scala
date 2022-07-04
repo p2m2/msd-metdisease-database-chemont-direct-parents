@@ -39,8 +39,9 @@ case class MsdPubChem(
   /* void pubchem as a Dataset */
   import net.sansa_stack.rdf.spark.io._
   import net.sansa_stack.rdf.spark.model.TripleOperations
-  val voidRdd : Dataset [Triple] = spark.rdf(Lang.TURTLE)(s"$rootDir/$category/$database/$version").toDS()
 
+  val voidRdd : Dataset [Triple] = spark.rdf(Lang.TURTLE)(s"$rootDir/$category/$database/$version/void.ttl").toDS()
+  voidRdd.map( _.toString).show(truncate=false)
   def uri(prefix: String, name : String) : String = "<"+prefixes.getOrElse(prefix,"")+name+">"
 
   def getPathReferenceTypeFiles() : Seq[String] = {

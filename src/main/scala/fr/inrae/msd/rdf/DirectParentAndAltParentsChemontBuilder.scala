@@ -87,15 +87,24 @@ object DirectParentAndAltParentsChemontBuilder {
       checkConfig(_ => success)
     )
   }
+  println("************************************************************************")
+  println(Runtime.version)
+  println("************************************************************************\n\n\n\n")
+
+
+
   val spark: SparkSession = SparkSession
     .builder()
     .appName("msd-metdisease-database-chemont-parents-builder")
     .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    .config("spark.sql.crossJoin.enabled", "true")
+    .config("spark.kryo.registrator","net.sansa_stack.rdf.spark.io.JenaKryoRegistrator")
+    /*
     .config("spark.kryo.registrator", String.join(
       ", ",
       "net.sansa_stack.rdf.spark.io.JenaKryoRegistrator",
       "net.sansa_stack.query.spark.ontop.OntopKryoRegistrator",
-      "net.sansa_stack.query.spark.sparqlify.KryoRegistratorSparqlify"))
+      "net.sansa_stack.query.spark.sparqlify.KryoRegistratorSparqlify")) */
     .getOrCreate()
 
   spark.sparkContext.setLogLevel("WARN")
@@ -211,6 +220,8 @@ object DirectParentAndAltParentsChemontBuilder {
 
     implicit val cidEncoder: Encoder[CID] = Encoders.product[CID]
 
+    //implicit val nodeEncoder = Encoders.kryo(classOf[Node])
+    //implicit val nodeTupleEncoder = Encoders.kryo(classOf[(Node, Node, Node)])
     /**
      * 1) CID from PMID_CID
      */
