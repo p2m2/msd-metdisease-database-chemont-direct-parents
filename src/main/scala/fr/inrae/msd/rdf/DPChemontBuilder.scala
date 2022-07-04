@@ -20,7 +20,7 @@ import java.util.Date
 To avoid => Exception in thread "main" java.lang.NoSuchMethodError: scala.runtime.Statics.releaseFence()V
 can not extends App
  */
-object DirectParentAndAltParentsChemontBuilder {
+object DPChemontBuilder extends App {
 
   import scopt.OParser
 
@@ -87,11 +87,9 @@ object DirectParentAndAltParentsChemontBuilder {
       checkConfig(_ => success)
     )
   }
-  println("************************************************************************")
+  println("********************************JAVA****************************************")
   println(Runtime.version)
   println("************************************************************************\n\n\n\n")
-
-
 
   val spark: SparkSession = SparkSession
     .builder()
@@ -108,8 +106,6 @@ object DirectParentAndAltParentsChemontBuilder {
     .getOrCreate()
 
   spark.sparkContext.setLogLevel("WARN")
-
-  def main(args: Array[String]): Unit = {
 
     // OParser.parse returns Option[Config]
     OParser.parse(parser1, args, Config()) match {
@@ -140,7 +136,6 @@ object DirectParentAndAltParentsChemontBuilder {
         // arguments are bad, error message will have been displayed
         System.err.println("exit with error.")
     }
-  }
 
   /**
    * First execution of the work.
@@ -184,7 +179,6 @@ object DirectParentAndAltParentsChemontBuilder {
     val graphAltParents : Dataset[(Seq[String],String)] = graphs.flatMap( _._2 )
 
     WriterCidChemont(rootMsdDirectory,forumCategoryMsd,versionMsd).write(graphDirectParent,graphAltParents)
-
 
     val contentProvenanceRDF : String =
       ProvenanceBuilder.provSparkSubmit(

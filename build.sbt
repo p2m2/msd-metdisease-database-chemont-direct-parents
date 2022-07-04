@@ -26,7 +26,7 @@ lazy val root = (project in file("."))
       "com.github.scopt" %% "scopt" % "4.0.1",
       "com.github.p2m2" %% "service-rdf-database-deployment" % "1.0.12"
     ),
-    Compile / mainClass := Some("fr.inrae.msd.rdf.DirectParentAndAltParentsChemontBuilder"),
+    Compile / mainClass := Some("fr.inrae.msd.rdf.DPChemontBuilder"),
     Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat,
     resolvers ++= Seq(
       "AKSW Maven Releases" at "https://maven.aksw.org/archiva/repository/internal",
