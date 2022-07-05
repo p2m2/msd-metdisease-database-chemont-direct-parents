@@ -178,6 +178,8 @@ object DPChemontBuilder extends App {
     val graphDirectParent : Dataset[(String,String)] = graphs.flatMap( _._1 )
     val graphAltParents : Dataset[(Seq[String],String)] = graphs.flatMap( _._2 )
 
+    graphAltParents.explain()
+
     WriterCidChemont(rootMsdDirectory,forumCategoryMsd,versionMsd).write(graphDirectParent,graphAltParents)
 
     val contentProvenanceRDF : String =
@@ -194,8 +196,8 @@ object DPChemontBuilder extends App {
       rootDir=rootMsdDirectory,
       spark=spark,
       category="prov",
-      database="ClassyFire",
-      version=versionMsd).writeFile(spark,contentProvenanceRDF,"msd-metdisease-database-chemont-parents-builder-"+versionMsd+".ttl")
+      database="",
+      version=Some("")).writeFile(spark,contentProvenanceRDF,"msd-metdisease-database-chemont-parents-builder-"+versionMsd+".ttl")
 
     spark.close()
   }
