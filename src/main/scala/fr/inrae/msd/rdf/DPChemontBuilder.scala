@@ -244,7 +244,7 @@ object DPChemontBuilder extends App {
       listRdfInchikeyFiles.map(pathFile => {
         val dataset: Dataset[Triple] = spark.rdf(Lang.TURTLE)(pathFile).toDS()
 
-        val isAttributeOf : Node = NodeFactory.createURI("http://semanticscience.org/resource/is-attribute-of")
+        val isAttributeOf : Node = NodeFactory.createURI("http://semanticscience.org/resource/SIO_000011")
 
         val pubchemList  = dataset
           .filter(_.getPredicate.matches(isAttributeOf))
